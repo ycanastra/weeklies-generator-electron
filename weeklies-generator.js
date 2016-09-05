@@ -1,4 +1,6 @@
 const exceljs = require('exceljs');
+var $ = require('jquery');
+
 require('datejs');
 
 const numDays = 7;
@@ -48,6 +50,16 @@ const styles = {
 	}
 }
 
+class ClassEvent {
+  constructor(labName, className, instructorName, sTime, eTime) {
+		this.labName = labName;
+		this.className = className;
+		this.instructorname = instructorName;
+		this.sTime = sTime;
+		this.eTime = eTime;
+  }
+}
+
 class WeekliesGenerator {
   constructor(labNames, startDate) {
 		this.labNames = labNames;
@@ -67,6 +79,8 @@ class WeekliesGenerator {
 										'Friday', 'Saturday'];
 			var row = 3;
 			var col = 2;
+
+			// sheetId starts at 1
 			this.createTitle(ws, this.labNames[sheetId - 1]);
 			this.createWeek(ws);
 
@@ -114,6 +128,17 @@ class WeekliesGenerator {
 		ws.getCell(row, col).value = day;
 		ws.getCell(row, col).font = styles.header.font;
 		ws.getCell(row, col).alignment = styles.header.alignment;
+
+		$.ajax({
+			url: 'http://labschedule.collaborate.ucsb.edu/?ts=1473145209',
+			dataType: 'text',
+			success: function(data) {
+				var classEvents = getClassEvents(data)
+				for (var classEvent of classEvents) {
+					console.log(classEvent);
+				}
+			}
+		});
 	}
 	createTimeColumn(ws, sRow, sCol, eRow) {
 		var date = Date.parse('08:00 AM');
@@ -132,6 +157,32 @@ class WeekliesGenerator {
 			date.add({ minutes: 30 });
 		}
 	}
+}
+
+function getClassEvents(data) {
+	var classEvents = [];
+	var elements = $('<div>').html(data)[0].getElementsByClassName('calendar_event_daily');
+
+	for (var i = 0; i < elements.length; i++) {
+		var label = elements[i].getElementsByTagName('label')[0].childNodes[0]
+
+		var className = label.nodeValue;
+		var labName = $(elements[i]).attr('title');
+
+		if ($(label.nextSibling).is('br')) {
+			var instructorName = label.nextSibling.nextSibling.nodeValue;
+			var time = label.nextSibling.nextSibling.nextSibling.innerText;
+		}
+		else {
+			var instructorName = null;
+			var time = label.nextSibling.innerText;
+		}
+		if (className != labName) {
+			var classEvent = new ClassEvent(labName, className, instructorName, time, 'asd');
+			classEvents.push(classEvent);
+		}
+	}
+	return classEvents;
 }
 
 module.exports = WeekliesGenerator
