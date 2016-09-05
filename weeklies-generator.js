@@ -51,21 +51,21 @@ const styles = {
 }
 
 class ClassEvent {
-  constructor(labName, className, instructorName, sTime, eTime) {
+	constructor(labName, className, instructorName, sTime, eTime) {
 		this.labName = labName;
 		this.className = className;
 		this.instructorname = instructorName;
 		this.sTime = sTime;
 		this.eTime = eTime;
-  }
+	}
 }
 
 class WeekliesGenerator {
-  constructor(labNames, startDate) {
+	constructor(labNames, startDate) {
 		this.labNames = labNames;
 		this.startDate = startDate;
 		this.workbook = new exceljs.Workbook();
-  }
+	}
 
 	generateWeeklies() {
 		var workbook = new exceljs.Workbook();
@@ -101,9 +101,9 @@ class WeekliesGenerator {
 
 	saveWorkbook(filename) {
 		this.workbook.xlsx.writeFile(filename)
-    .then(function() {
-        // done
-    });
+		.then(function() {
+				// done
+		});
 	}
 	createTitle(ws, titleName) {
 		ws.mergeCells(1, 1, 1, 8);
