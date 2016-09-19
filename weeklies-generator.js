@@ -40,12 +40,23 @@ const styles = {
 	},
 	time: {
 		font: {
-			name: 'Verdanana',
-			size: 10
+			name: 'Calibri',
+			size: 12
 		},
 		alignment: {
 			vertical: 'top',
 			horizontal: 'right'
+		}
+	},
+	general: {
+		font: {
+			name: 'Calibri',
+			size: 12
+		},
+		alignment: {
+			vertical: 'top',
+			horizontal: 'center',
+			wrapText: true
 		}
 	}
 }
@@ -54,7 +65,7 @@ class ClassEvent {
 	constructor(labName, className, instructorName, sTime, eTime) {
 		this.labName = labName;
 		this.className = className;
-		this.instructorname = instructorName;
+		this.instructorName = instructorName;
 		this.sTime = sTime;
 		this.eTime = eTime;
 	}
@@ -65,18 +76,30 @@ class WeekliesGenerator {
 		this.labNames = labNames;
 		this.startDate = startDate;
 		this.workbook = new exceljs.Workbook();
-	}
+		this.dates = [];
 
+		var date = new Date(this.startDate);
+
+		for (let i = 0; i < numDays; i++) {
+			this.dates.push(date);
+			date = new Date(date);
+			date.add({days: 1})
+		}
+	}
+ 	callback () { console.log('all done'); }
 	generateWeeklies() {
 		var workbook = new exceljs.Workbook();
+		const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+									'Friday', 'Saturday'];
+		const classEvents = [];
+		let ajaxCallsRemaining = 7;
 
 		this.labNames.forEach((labName) => {
 			this.createWorksheet(labName);
 		});
 
 		this.workbook.eachSheet((ws, sheetId) => {
-			const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-										'Friday', 'Saturday'];
+
 			var row = 3;
 			var col = 2;
 
@@ -87,12 +110,33 @@ class WeekliesGenerator {
 			this.createTimeColumn(ws, 3, 1, maxRow - 3);
 
 			for (var i = 0; i < numDays; i++) {
-				this.createLabColumn(ws, days[i], row, col + i)
+				this.createLabColumn(ws, days[i], 3, maxRow - 3, i + 2)
 			}
 		})
+		this.dates.forEach((date, index) => {
+			const url = `http://labschedule.collaborate.ucsb.edu/?ts=${date.getTime()/1000}`;
+			$.ajax({
+				url: url,
+				dataType: 'text',
+				success: function(data) {
+					const tempClassEvents = getClassEvents(date, data)
+					for (let classEvent of tempClassEvents) {
+						classEvents.push(classEvent)
+					}
+					--ajaxCallsRemaining;
+					if (ajaxCallsRemaining <= 0) {
+						classEvents.forEach((classEvent) => {
+							that.insertClass(classEvent)
+						})
+					}
+				}
+			});
+		})
 
-		this.saveWorkbook('test.xlsx');
-		console.log('saved now');
+		const that = this;
+		setTimeout(function(){ that.saveWorkbook('test.xlsx'); }, 500);
+
+		// console.log('saved now');
 	}
 
 	createWorksheet(labName) {
@@ -102,7 +146,7 @@ class WeekliesGenerator {
 	saveWorkbook(filename) {
 		this.workbook.xlsx.writeFile(filename)
 		.then(function() {
-				// done
+			console.log('saved now');
 		});
 	}
 	createTitle(ws, titleName) {
@@ -124,28 +168,138 @@ class WeekliesGenerator {
 		ws.getCell(2, 1).font = styles.week.font;
 		ws.getCell(2, 1).alignment = styles.week.alignment;
 	}
-	createLabColumn(ws, day, row, col) {
-		ws.getCell(row, col).value = day;
-		ws.getCell(row, col).font = styles.header.font;
-		ws.getCell(row, col).alignment = styles.header.alignment;
+	insertClass(classEvent) {
+		const ws = this.workbook.getWorksheet(classEvent.labName)
+		if (!ws) {
+			return
+		}
+		const sTime = classEvent.sTime;
+		const eTime = classEvent.eTime;
 
-		$.ajax({
-			url: 'http://labschedule.collaborate.ucsb.edu/?ts=1473145209',
-			dataType: 'text',
-			success: function(data) {
-				var classEvents = getClassEvents(data)
-				for (var classEvent of classEvents) {
-					console.log(classEvent);
+		const sRow = 2*sTime.getHours() - 12 + sTime.getMinutes()/30
+		const eRow = 2*eTime.getHours() - 13 + eTime.getMinutes()/30
+		const col = classEvent.sTime.getDay() + 2
+
+		const timeString = (sTime.toString('h:mmt') + ' - ' + eTime.toString('h:mmt')).toLowerCase();
+
+		let fgColor;
+
+		if (classEvent.className == 'CLOSED') {
+			fgColor = '606060';
+		}
+		else if (classEvent.className == 'OPEN') {
+			fgColor = 'FFFFFF';
+		}
+		else {
+			fgColor = 'FFFF99';
+		}
+
+		ws.getCell(sRow, col).value = classEvent.className;
+
+		if (sRow == eRow) {
+			ws.getCell(sRow, col).border = {
+				top: {style:'medium'},
+				left: {style:'medium'},
+				bottom: {style:'medium'},
+				right: {style:'medium'}
+			}
+		}
+		else if (eRow - sRow == 1) {
+			ws.getCell(eRow, col).value = timeString
+			ws.getCell(sRow, col).border = {
+				top: {style: 'medium'},
+				left: {style:'medium'},
+				right: {style:'medium'}
+			}
+			ws.getCell(eRow, col).border = {
+				left: {style:'medium'},
+				bottom: {style:'medium'},
+				right: {style:'medium'}
+			}
+		}
+		else {
+			let instructorName = classEvent.instructorName;
+			if (instructorName == 'To Be Determined') {
+				instructorName = 'TBD';
+			}
+			ws.getCell(eRow - 1, col).value = (instructorName) ? instructorName : ''
+			ws.getCell(eRow, col).value = timeString
+			ws.getCell(sRow, col).border = {
+				top: {style: 'medium'},
+				left: {style:'medium'},
+				right: {style:'medium'}
+			}
+			ws.getCell(eRow, col).border = {
+				left: {style:'medium'},
+				bottom: {style:'medium'},
+				right: {style:'medium'}
+			}
+
+			ws.mergeCells(sRow, col, eRow - 2, col);
+		}
+
+		for (var i = sRow; i < eRow + 1; i++) {
+			ws.getCell(i, col).fill = {
+				type: 'pattern',
+				pattern:'solid',
+				fgColor:{argb: fgColor}
+			}
+		}
+	}
+	createLabColumn(ws, day, sRow, eRow, col) {
+		ws.getCell(sRow, col).value = day;
+		ws.getCell(sRow, col).font = styles.header.font;
+		ws.getCell(sRow, col).alignment = styles.header.alignment;
+		ws.getCell(sRow, col).border = {
+			top: {style:'medium'},
+			left: {style:'medium'},
+			bottom: {style:'medium'},
+			right: {style:'medium'}
+		}
+
+		ws.getColumn(col).width = 14;
+
+		for (var i = 0; i < eRow; i++) {
+			ws.getCell(sRow + i + 1, col).value = ''
+			ws.getCell(sRow + i + 1, col).font = styles.general.font;
+			ws.getCell(sRow + i + 1, col).alignment = styles.general.alignment;
+
+			if (i == 0) {
+				ws.getCell(sRow + i + 1, col).border = {
+					top: {style:'medium'},
+					left: {style:'medium'},
+					right: {style:'medium'}
 				}
 			}
-		});
+			else if (i == eRow - 1) {
+				ws.getCell(sRow + i + 1, col).border = {
+					left: {style:'medium'},
+					right: {style:'medium'},
+					bottom: {style:'medium'}
+				}
+			}
+			else {
+				ws.getCell(sRow + i + 1, col).border = {
+					left: {style:'medium'},
+					right: {style:'medium'}
+				}
+			}
+		}
 	}
 	createTimeColumn(ws, sRow, sCol, eRow) {
 		var date = Date.parse('08:00 AM');
 
+		ws.getColumn(sCol).width = 14;
+
 		ws.getCell(sRow, sCol).value = 'Time';
 		ws.getCell(sRow, sCol).font = styles.header.font;
 		ws.getCell(sRow, sCol).alignment = styles.header.alignment;
+		ws.getCell(sRow, sCol).border = {
+			top: {style:'medium'},
+			left: {style:'medium'},
+			bottom: {style:'medium'},
+			right: {style:'medium'}
+		}
 
 		for (var i = 0; i < eRow; i++) {
 			if (date.getMinutes() != 30) {
@@ -153,13 +307,60 @@ class WeekliesGenerator {
 			}
 			ws.getCell(sRow + i + 1, sCol).font = styles.time.font;
 			ws.getCell(sRow + i + 1, sCol).alignment = styles.time.alignment;
+			ws.getRow(sRow + i + 1).height = 20;
+
+			ws.getCell(sRow + i + 1, sCol).fill = {
+				type: 'pattern',
+				pattern:'solid',
+				fgColor:{argb: 'FFFFFF'}
+			}
+
+			if (i == 0) {
+				ws.getCell(sRow + i + 1, sCol).border = {
+					top: {style:'medium'},
+					left: {style:'medium'},
+					right: {style:'medium'}
+				}
+			}
+			else if (i == eRow - 1) {
+				ws.getCell(sRow + i + 1, sCol).border = {
+					bottom: {style:'medium'},
+					left: {style:'medium'},
+					right: {style:'medium'}
+				}
+			}
 
 			date.add({ minutes: 30 });
 		}
 	}
 }
 
-function getClassEvents(data) {
+function getDatesFromDateString(date, timeText) {
+	const sTempTime = Date.parse(timeText.split('-')[0]);
+	const eTempTime = Date.parse(timeText.split('-')[1]);
+
+	const sHour = sTempTime.getHours();
+	const eHour = eTempTime.getHours();
+
+	const sMinutes = sTempTime.getMinutes();
+	const eMinutes = eTempTime.getMinutes();
+
+	const sTime = new Date(date);
+	const eTime = new Date(date);
+
+	sTime.set({
+		hour: sHour,
+		minute: sMinutes
+	});
+	eTime.set({
+		hour: eHour,
+		minute: eMinutes
+	})
+
+	return [sTime, eTime];
+}
+
+function getClassEvents(date, data) {
 	var classEvents = [];
 	var elements = $('<div>').html(data)[0].getElementsByClassName('calendar_event_daily');
 
@@ -169,16 +370,30 @@ function getClassEvents(data) {
 		var className = label.nodeValue;
 		var labName = $(elements[i]).attr('title');
 
+		var sTime;
+		var eTime;
+
 		if ($(label.nextSibling).is('br')) {
 			var instructorName = label.nextSibling.nextSibling.nodeValue;
-			var time = label.nextSibling.nextSibling.nextSibling.innerText;
+			const timeText = label.nextSibling.nextSibling.nextSibling.innerText;
+
+			const times = getDatesFromDateString(date, timeText);
+
+			sTime = times[0];
+			eTime = times[1];
+
 		}
 		else {
+			const timeText = label.nextSibling.innerText;
+			const times = getDatesFromDateString(date, timeText);
+
+			sTime = times[0];
+			eTime = times[1];
+
 			var instructorName = null;
-			var time = label.nextSibling.innerText;
 		}
 		if (className != labName) {
-			var classEvent = new ClassEvent(labName, className, instructorName, time, 'asd');
+			var classEvent = new ClassEvent(labName, className, instructorName, sTime, eTime);
 			classEvents.push(classEvent);
 		}
 	}

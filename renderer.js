@@ -11,7 +11,7 @@ $(document).ready(function() {
 
 		// Currently using temporary list of labs and week
 		var tempLabNames = ['Phelps 1513', 'SSMS 1303'];
-		var startDate = new Date.parse('4-Sep-2016');
+		var startDate = new Date.parse('25-Sep-2016');
 
 		var weekliesGenerator = new WeekliesGenerator(tempLabNames, startDate);
 
